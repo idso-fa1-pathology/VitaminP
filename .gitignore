@@ -25,3 +25,4 @@ TestResults.xml
 notebooks/data_validation/nc.ipynb
 notebooks/figures/Fig4_c.ipynb
 notebooks/data_validation/Fig4_c.ipynb
+.DS_Store

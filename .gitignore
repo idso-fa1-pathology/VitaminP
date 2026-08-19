@@ -10,6 +10,9 @@ cache/
 #Snapshots folder
 .snapshots/
 checkpoints/
+# Private deployment and inference configurations
+configs/inference/
+configs/jobs/
 #Testing Output folder
 .output/
 #Extension App-file

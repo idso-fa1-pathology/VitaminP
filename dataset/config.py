@@ -152,6 +152,16 @@ class Config:
     def test_samples(self) -> Optional[List[str]]:
         return self._config['splits']['test_samples']
     
+    @property
+    def use_xenium_train_fraction_for_val(self) -> bool:
+        return self._config['splits'].get('use_xenium_train_fraction_for_val', False)
+    
+    @property
+    def xenium_val_fraction_from_train(self) -> float:
+        return self._config['splits'].get('xenium_val_fraction_from_train', 0.0)
+    @property
+    def random_seed(self) -> int:
+        return self._config['splits'].get('random_seed', 42)
     # Dataloader
     @property
     def batch_size(self) -> int:

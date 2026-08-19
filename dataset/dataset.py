@@ -8,7 +8,7 @@ import os
 import zarr
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
 import pickle
 from typing import List, Tuple, Dict, Optional
 from tqdm import tqdm
@@ -688,8 +688,85 @@ def create_dataloaders(config) -> Tuple[DataLoader, DataLoader, DataLoader]:
     else:
         dataset_class = CRCZarrDataset
     
-    train_dataset = dataset_class(train_samples, config, training=True)
-    val_dataset = dataset_class(val_samples, config, training=False)
+    # ------------------------------------------------------------
+    # Optional: split ONLY Xenium training patches into validation
+    # ------------------------------------------------------------
+    # This keeps existing dataset-specific validation sets unchanged
+    # (PanNuke, TissueNet, Lizard, MoNuSeg, TNBC, etc.) and only
+    # takes a random fraction from Xenium training patches for tuning.
+    xenium_val_fraction = float(
+        getattr(config, "xenium_val_fraction_from_train",
+                getattr(config, "val_fraction_from_train", 0.0))
+    )
+    use_xenium_train_fraction_for_val = bool(
+        getattr(config, "use_xenium_train_fraction_for_val",
+                getattr(config, "use_train_fraction_for_val", False))
+    )
+
+    def _is_xenium_sample(sample_name: str) -> bool:
+        known_prefixes = (
+            'CRC', 'tissuenet', 'pannuke', 'Fold', 'lizard', 'monuseg',
+            'monusac', 'tnbc', 'nuinsseg', 'cryonuseg', 'bc', 'consep',
+            'kumar', 'cpm17', 'cpm15', 'he_dsb2018',
+            'fluorescence_dsb2018', 'panoptils'
+        )
+        legacy_names = {'train', 'val', 'test'}
+        return sample_name not in legacy_names and not sample_name.startswith(known_prefixes)
+
+    def _concat_datasets(datasets):
+        datasets = [d for d in datasets if d is not None and len(d) > 0]
+        if len(datasets) == 0:
+            return None
+        if len(datasets) == 1:
+            return datasets[0]
+        return ConcatDataset(datasets)
+
+    if use_xenium_train_fraction_for_val and xenium_val_fraction > 0:
+        xenium_train_samples = [s for s in train_samples if _is_xenium_sample(s)]
+        non_xenium_train_samples = [s for s in train_samples if not _is_xenium_sample(s)]
+
+        # Existing validation samples stay as validation.
+        # Only Xenium training samples are patch-split into train/val.
+        non_xenium_train_dataset = (
+            dataset_class(non_xenium_train_samples, config, training=True)
+            if len(non_xenium_train_samples) > 0 else None
+        )
+        existing_val_dataset = (
+            dataset_class(val_samples, config, training=False)
+            if len(val_samples) > 0 else None
+        )
+
+        xenium_train_base = dataset_class(xenium_train_samples, config, training=True)
+        xenium_val_base = dataset_class(xenium_train_samples, config, training=False)
+
+        n_xenium = len(xenium_train_base)
+        n_xenium_val = int(n_xenium * xenium_val_fraction)
+        n_xenium_train = n_xenium - n_xenium_val
+
+        generator = torch.Generator().manual_seed(config.random_seed)
+        indices = torch.randperm(n_xenium, generator=generator).tolist()
+
+        xenium_val_indices = indices[:n_xenium_val]
+        xenium_train_indices = indices[n_xenium_val:]
+
+        xenium_train_dataset = Subset(xenium_train_base, xenium_train_indices)
+        xenium_val_dataset = Subset(xenium_val_base, xenium_val_indices)
+
+        train_dataset = _concat_datasets([non_xenium_train_dataset, xenium_train_dataset])
+        val_dataset = _concat_datasets([existing_val_dataset, xenium_val_dataset])
+
+        if config.verbose:
+            print(f"🔀 Xenium-only train/val split:")
+            print(f"   Xenium train-source samples: {xenium_train_samples}")
+            print(f"   Xenium total patches: {n_xenium}")
+            print(f"   Xenium train patches: {n_xenium_train}")
+            print(f"   Xenium val patches: {n_xenium_val}")
+            print(f"   Xenium val fraction: {xenium_val_fraction:.2f}")
+            print(f"   Existing non-Xenium val samples kept: {len(val_samples)} samples")
+    else:
+        train_dataset = dataset_class(train_samples, config, training=True)
+        val_dataset = dataset_class(val_samples, config, training=False)
+
     test_dataset = dataset_class(test_samples, config, training=False)
     
     train_loader = DataLoader(

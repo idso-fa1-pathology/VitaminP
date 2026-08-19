@@ -77,6 +77,7 @@ splits:
     - ovarian
     - skin
     - pancreasV1
+    - prostate
     
     # --- CRC (Primary Bulk) ---
     - CRC01
@@ -156,8 +157,8 @@ splits:
     - cpm17_val
 
     # --- Xenium ---
-    - prostate
-    - lungV1
+    # Xenium validation is created by randomly taking 10% of Xenium train patches.
+    # lungV1 is held out for test.
     
     # --- CRC (Held-out subset) ---
     - CRC09
@@ -204,12 +205,15 @@ splits:
     # --- CPM-17 (Test Set) ---
     - cpm17_test
 
+    # --- Xenium held-out test ---
+    - lungV1
+
     # --- CRC (Held-out for reporting) ---
     - CRC03
     - CRC11
     - CRC37
     
-    # (Note: BC and Xenium do not have explicit test sets in this config)
+    # (Note: Xenium test uses lungV1; BC uses bc_test)
 
   # --------------------------------------------------------------------------
   # GLOBAL SETTINGS
@@ -218,6 +222,11 @@ splits:
   val_ratio: 0.09
   test_ratio: 0.01
   random_seed: 42
+
+  # Split ONLY Xenium training patches into train/validation.
+  # Existing non-Xenium validation/test splits remain unchanged.
+  use_xenium_train_fraction_for_val: true
+  xenium_val_fraction_from_train: 0.10
 
   # List of ALL folders to scan (CORRECTED to match Zarr Group Names)
   all_samples:

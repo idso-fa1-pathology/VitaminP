@@ -130,44 +130,158 @@ def inspect_inputs(sample_dir: Path, he_path: Path, he_shape: tuple) -> tuple[di
             issues.append(str(exc))
     return paths, issues
 
+def plan_sample(args, sample: str) -> tuple[dict, list[dict], dict]:
+    features = load_features(args.roi_dir, sample)
+    rows = metadata_rows(sample, (
+        (index, generate_patches_from_roi(shape(feature["geometry"]),
+                                         patch_size=PATCH_SIZE, overlap=0))
+        for index, feature in enumerate(features)))
+    paths, issues, image_shape = {}, [], None
+    padded_tiles, empty_tiles = [], []
+    try:
+        he_path = first_image(args.input_dir / sample, ("he.tiff", "he.tif"))
+        image_shape = tiff_shape(he_path)
+        if len(image_shape) < 2:
+            raise ValueError(f"Cannot obtain H&E dimensions from {he_path}: {image_shape}")
+        paths, issues = inspect_inputs(args.input_dir / sample, he_path, image_shape)
+        height, width = image_shape[:2]
+        for row in rows:
+            h = len(range(*slice(row["y_start"], row["y_end"]).indices(height)))
+            w = len(range(*slice(row["x_start"], row["x_end"]).indices(width)))
+            if h > PATCH_SIZE or w > PATCH_SIZE:
+                issues.append(f"Patch {row['patch_idx']}: original slice {(h, w)} cannot fit "
+                              "the notebook's 512x512 padding buffer; coordinates retained.")
+            elif (h, w) != (PATCH_SIZE, PATCH_SIZE):
+                padded_tiles.append(row["patch_idx"])
+                if h == 0 or w == 0:
+                    empty_tiles.append(row["patch_idx"])
+    except (OSError, ValueError) as exc:
+        issues.append(str(exc))
+    if not rows:
+        issues.append("No patches generated; original converter skips this sample.")
+    result = {"sample": sample, "status": "planned" if rows else "skipped",
+              "num_rois": len(features), "num_patches": len(rows),
+              "he_shape": list(image_shape) if image_shape else None,
+              "extraction_issues": issues, "padded_patch_indices": padded_tiles,
+              "empty_patch_indices": empty_tiles,
+              "metadata_comparison": compare_metadata(rows, args.reference_dir, sample)}
+    return result, rows, paths
+
+
+def write_sample(destination: Path, rows: list[dict], paths: dict) -> None:
+    """Preserve ORION's channel swap and H&E-driven zero padding for all arrays."""
+    import numpy as np
+    import zarr
+    from numcodecs import Blosc
+    from tifffile import imread
+
+    if int(zarr.__version__.split(".")[0]) != 2:
+        raise RuntimeError("This workflow requires Zarr v2 (install zarr>=2.16,<3).")
+    he_image = imread(paths["he_image"])
+    mif_image = imread(paths["mif_image"])
+    if mif_image.shape[0] == 2 and len(mif_image.shape) == 3:
+        mif_image = np.transpose(mif_image, (1, 2, 0))
+    # Original ORION: cytoplasm, nuclei -> nuclei (Hoechst), cytoplasm (ECad+CD45).
+    mif_image = mif_image[..., [1, 0]]
+    he_nuclei = np.load(paths["he_nuclei"], allow_pickle=False)
+    mif_nuclei = np.load(paths["mif_nuclei"], allow_pickle=False)
+    cells = np.load(paths["cells"], allow_pickle=False)
+    sources = {
+        "he/images": (he_image, "uint8"),
+        "he/nuclei_masks": (he_nuclei, he_nuclei.dtype),
+        "he/cell_masks": (cells, cells.dtype),
+        "mif/images": (mif_image, mif_image.dtype),
+        "mif/nuclei_masks": (mif_nuclei, mif_nuclei.dtype),
+        "mif/cell_masks": (cells, cells.dtype),
+    }
+    destination.mkdir(exist_ok=False)
+    for modality in ("he", "mif"):
+        (destination / modality).mkdir()
+    arrays = {}
+    for name, (source, dtype) in sources.items():
+        tile_shape = (PATCH_SIZE, PATCH_SIZE, *source.shape[2:])
+        arrays[name] = zarr.open_array(
+            str(destination / f"{name}.zarr"), mode="w-",
+            shape=(len(rows), *tile_shape), chunks=(1, *tile_shape), dtype=dtype,
+            compressor=Blosc(cname="zstd", clevel=3))
+    for row in rows:
+        ys, ye, xs, xe = (row[key] for key in ("y_start", "y_end", "x_start", "x_end"))
+        tiles = {name: source[ys:ye, xs:xe] for name, (source, _) in sources.items()}
+        h, w = tiles["he/images"].shape[:2]
+        # The original trigger and dimensions are from H&E, not from each array independently.
+        if (h, w) != (PATCH_SIZE, PATCH_SIZE):
+            for name, (_, dtype) in sources.items():
+                padded = np.zeros(arrays[name].shape[1:], dtype=dtype)
+                padded[:h, :w] = tiles[name]
+                tiles[name] = padded
+        for name, tile in tiles.items():
+            if tile.shape != arrays[name].shape[1:]:
+                raise ValueError(f"{name}, patch {row['patch_idx']}: unexpected slice shape {tile.shape}")
+            arrays[name][row["patch_idx"]] = tile
+    for modality in ("he", "mif"):
+        write_metadata(destination / modality / "metadata.csv", rows)
+
+
 def main(argv=None) -> int:
-    parser = parser_for("orion", "Reproduce the supplied ORION ROI coordinate scan (dry-run only).")
+    parser = parser_for("orion", "Reproduce the original ORION paired ROI-to-Zarr conversion.")
     args = parser.parse_args(argv)
-    if not args.dry_run:
-        parser.error("The supplied ORION notebook cell only scans/counts ROIs. Use --dry-run; "
-                     "Zarr writing requires the original image/mask extraction and writing cell.")
+    if not args.dry_run and args.output_dir is None:
+        parser.error("--output-dir is required unless --dry-run is used")
     samples = discover_samples(args, orion=True)
     expected = load_expected_counts(args.expected_counts)
     args.report_dir.mkdir(parents=True, exist_ok=False)
-    results = []
+    results, plans = [], {}
     for sample in samples:
         try:
-            features = load_features(args.roi_dir, sample)
-            rows = metadata_rows(sample, (
-                (index, generate_patches_from_roi(shape(feature["geometry"]),
-                                                 patch_size=PATCH_SIZE, overlap=0))
-                for index, feature in enumerate(features)))
+            result, rows, paths = plan_sample(args, sample)
             write_metadata(args.report_dir / f"{sample}.csv", rows)
-            result = {"sample": sample, "status": "planned", "num_rois": len(features),
-                      "num_patches": len(rows),
-                      "metadata_comparison": compare_metadata(rows, args.reference_dir, sample)}
-            LOG.info("%s: %d ROIs -> %d candidate tiles", sample, len(features), len(rows))
+            plans[sample] = (rows, paths)
+            LOG.info("%s: %d ROIs -> %d tiles (%d padded, %d empty)", sample,
+                     result["num_rois"], len(rows), len(result["padded_patch_indices"]),
+                     len(result["empty_patch_indices"]))
+            for issue in result["extraction_issues"]:
+                LOG.warning("%s: %s", sample, issue)
         except Exception as exc:
             result = {"sample": sample, "status": "error", "error": str(exc)}
             LOG.error("%s: %s", sample, exc)
         results.append(result)
     report, failed = finalize_report(args, "orion", results, expected)
-    report["extraction_verified"] = False
+    extraction_failed = any(s.get("extraction_issues") or s["status"] == "error" for s in results)
+    if extraction_failed:
+        failed = True
+        report["status"] = "failed"
+    report["source_arrays_checked"] = not extraction_failed
+    report["mif_channel_order"] = {"source": ["cytoplasm", "nuclei"], "output": ["nuclei", "cytoplasm"]}
     with (args.report_dir / "orion_crc_patch_summary.csv").open("x", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=("sample", "has_annotations", "num_rois", "num_patches"))
         writer.writeheader()
         for result in results:
-            writer.writerow({"sample": result["sample"], "has_annotations": result["status"] == "planned",
+            writer.writerow({"sample": result["sample"], "has_annotations": result["status"] != "error",
                              "num_rois": result.get("num_rois", 0), "num_patches": result.get("num_patches", 0)})
     save_report(args, report)
-    LOG.warning("ORION counts are ROI candidates, not verified extractable tiles. "
-                "The supplied source has no image-bound checks or Zarr conversion.")
-    return 1 if failed else 0
+    if failed:
+        LOG.error("Source checks or requested validations failed. Coordinates retained in report; no Zarr written.")
+        return 1
+    if args.dry_run:
+        return 0
+    args.output_dir.mkdir(parents=True, exist_ok=False)
+    marker = args.output_dir / "INCOMPLETE"
+    marker.write_text("Conversion in progress. Do not use until this marker is removed.\n")
+    completed = []
+    try:
+        for sample in samples:
+            rows, paths = plans[sample]
+            write_sample(args.output_dir / sample, rows, paths)
+            completed.append(sample)
+            LOG.info("%s: wrote %d paired tiles", sample, len(rows))
+    except Exception as exc:
+        report.update(status="failed", write_error=str(exc), completed_samples=completed)
+        save_report(args, report)
+        raise
+    marker.unlink()
+    report.update(status="written", zarr_written=True, completed_samples=completed)
+    save_report(args, report)
+    return 0
 
 
 if __name__ == "__main__":

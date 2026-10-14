@@ -5,12 +5,12 @@ loaded by [`dataset/dataset.py`](../../dataset/dataset.py). The exploratory
 notebooks remain unchanged under [`notebooks/data_preprocessing`](../../notebooks/data_preprocessing)
 for transparency; these scripts provide the reproducible path-based workflows.
 
-For the original pathologist-selected Xenium ROI-to-Zarr converter and ORION
-ROI coordinate scan, see [`roi_to_zarr/README.md`](roi_to_zarr/README.md).
+For the original pathologist-selected Xenium and ORION ROI-to-Zarr converters,
+see [`roi_to_zarr/README.md`](roi_to_zarr/README.md).
 That workflow is separate from `preprocess_xenium_crc.py`, which synchronizes
-masks in already constructed datasets. The supplied ORION cell lacks its
-Zarr-writing implementation; the new ORION tool currently supports dry runs
-and reference validation only.
+masks in already constructed datasets. Both converters support coordinate
+dry runs and reference validation, while retaining their distinct image-bound,
+padding, and mIF-channel rules.
 
 Install the project requirements before running a converter (Zarr v2,
 NumCodecs, and headless OpenCV are declared there):

@@ -33,10 +33,10 @@ and ambiguities were documented before implementing the conversions:
 - Neither cell deduplicates overlapping ROIs, merges polygons, repairs invalid
   geometry, filters by ROI label, or excludes tiles based on tissue or masks.
   No such operations are added.
-- Xenium uses `he_nuclei.npy` for H&E nuclei and `mif_cells.npy` for **both**
+- Both converters use `he_nuclei.npy` for H&E nuclei and `mif_cells.npy` for **both**
   modalities' cell masks. The later nuclei-mask replacement in
   `notebooks/data_preprocessing/Xenium_CRC.ipynb` is a separate operation and
-  is **not** applied by this converter.
+  is **not** applied by these converters.
 - ORION's original summary writer can fail on error rows because they contain
   an extra `error` field; its mean-per-ROI calculation can divide by zero for
   empty annotations. Structured reporting handles these reporting errors
@@ -68,8 +68,9 @@ code are not modified or run by these tools.
 
 ## Required source files and annotation naming
 
-Xenium requires already registered images and instance-label masks on the
-same pixel grid:
+Both converters require already registered images and instance-label masks
+on the same pixel grid. ORION uses the same filenames under
+`/data/ORION-CRC/CRC<sample-id>/`:
 
 ```text
 /data/Xenium/
@@ -83,8 +84,12 @@ same pixel grid:
         └── mif_cells.npy
 ```
 
-The source labels mIF channel 0 as DAPI/nuclei and channel 1 as combined
-cytoplasm. This tool does not reconstruct channels from raw instrument data,
+The Xenium source labels mIF channel 0 as DAPI/nuclei and channel 1 as combined
+cytoplasm. ORION input is **channel 0 = cytoplasm (ECad+CD45), channel 1 =
+nuclei (Hoechst)**; the converter swaps these to nuclei first, cytoplasm
+second. Supply the original unswapped ORION input: an already swapped file
+would be swapped again, and the image shape cannot identify that mistake.
+These tools do not reconstruct channels from raw instrument data,
 register images, rescale coordinates, normalize intensities, rasterize
 segmentation GeoJSONs, or relabel instance IDs. The upstream registration,
 channel construction, and mask-generation workflows must be supplied
@@ -115,15 +120,16 @@ Whole-cell and nuclear segmentation GeoJSONs are **not** pathologist ROIs and
 must not be put under this name. The file format alone cannot establish its
 provenance; the user must supply the correct original ROI annotations.
 
-The annotation directories contain `.gitignore` files that exclude their
-contents by default. No annotations are bundled here. Neither tool writes to
-the source or ROI directories unless the user explicitly chooses a separate,
-new report/output subdirectory there.
+GeoJSON files in the annotation directories are not ignored by Git and can
+be included in a commit. Neither tool writes to the source or ROI directories
+unless the user explicitly chooses a separate, new report/output subdirectory
+there. The release checks described above still apply before publication.
 
-ORION's supplied scanner requires only sample directories whose names start
-with `CRC`, plus their ROI annotations. The exact image files, mask files,
-channels, and extraction-stage boundary handling needed for ORION Zarr
-construction remain **unspecified by the supplied cell**.
+ORION discovers only sample directories whose names start with `CRC`.
+Its coordinates can be generated from ROI annotations alone, but image and
+mask checks are required before conversion. If those files are missing, a
+dry run still reports the coordinates with a nonzero status and explicit
+extraction issues, rather than claiming successful reproduction.
 
 ## Exact tile-selection rules
 
@@ -134,7 +140,7 @@ truncation, a 512-pixel tile size, zero overlap, and a 512-pixel stride.
 The CLI intentionally does not offer parameters to change these scientific
 settings. Neither pipeline uses adaptive ROI expansion.
 
-| Behavior | Xenium | ORION supplied scanner |
+| Behavior | Xenium | ORION |
 | --- | --- | --- |
 | Both ROI bounding-box dimensions <512 | One centered candidate; clamp starts after computing ends | Same centered-candidate logic |
 | Small ROI coverage threshold | No >10% test | No >10% test |
@@ -144,7 +150,10 @@ settings. Neither pipeline uses adaptive ROI expansion.
 | Negative general-grid starts | Retained by original function | Clamped to zero by original function |
 | Overlapping or repeated ROIs | Keep repeated tiles with distinct ROI indices | Keep repeated tiles with distinct ROI indices |
 | Tissue, mask occupancy, ROI class filters | None | None |
-| Padding, polygon repair, spatial transforms | None | None |
+| Undersized slices | Error; no padding | Zero-pad all six arrays using H&E slice dimensions |
+| Entirely out-of-image slice | Rejected by upper-bound check | Keep as an all-zero padded tile |
+| mIF channel swap | None | Swap input channels 0 and 1 after transpose |
+| Polygon repair, spatial transforms | None | None |
 
 The Xenium CLI checks input shapes and the resulting Python slices before
 writing. An incompatible array or undersized slice is a reported failure,
@@ -154,6 +163,13 @@ TIFF dimensions to apply the original boundary checks; missing mIF/mask files
 are reported as extraction failures while available coordinates are retained.
 It uses TIFF headers and memory-mapped NPY masks for these checks, without
 loading whole images. Matching dimensions do not prove correct registration.
+
+ORION also checks matching input shapes without altering selection. Its
+reports list padded and empty patch indices. Unlike Xenium, undersized and
+empty slices are valid and are not excluded. An abnormal slice larger than
+512 (possible with negative endpoints interpreted by NumPy) cannot fit the
+original padding buffer and is reported as an error, without changing its
+coordinates. Both pipelines retain the original feature and tile ordering.
 
 ## Reproducing Xenium
 
@@ -192,7 +208,7 @@ the historical full-cohort target is then reported as unverified, while
 per-sample reference checks still apply. Exact original sample names and their
 individual counts have not yet been supplied.
 
-### Xenium output contract
+### Paired output contract (Xenium and ORION)
 
 ```text
 <output-dir>/<sample>/
@@ -211,6 +227,8 @@ individual counts have not yet been supplied.
 Every Zarr chunk contains one complete tile. Image values and label IDs are
 copied without normalization or relabeling; H&E storage casts to `uint8`, as
 in the original notebook. Only `(2,H,W)` mIF is transposed to `(H,W,2)`.
+ORION then swaps the two mIF channels and zero-pads undersized image/mask
+slices; Xenium applies neither operation. Mask labels are never swapped.
 Both modalities use identical slices and patch indices. Both metadata files
 have the original column order:
 
@@ -225,7 +243,9 @@ and CRC. It does not claim equivalence to any later mask replacement or
 unprovided preprocessing step. Actual conversion loads one sample's full
 images and masks into memory, like the source notebook; plan RAM accordingly.
 
-## Reproducing the supplied ORION scan
+## Reproducing ORION
+
+Inspect coordinates, source shapes, and padding counts without creating Zarr:
 
 ```bash
 python scripts/data_preprocessing/roi_to_zarr/orion_roi_to_zarr.py \
@@ -240,15 +260,26 @@ Omit either reference option if that original artifact is unavailable; the
 report will say so. The tool also writes `orion_crc_patch_summary.csv` with
 the notebook's `sample,has_annotations,num_rois,num_patches` columns. Empty
 feature collections produce zero candidates without division by zero;
-missing/malformed annotations produce an error and a nonzero exit status.
+as in the supplied converter, these samples are skipped and yield a nonzero
+run status. Missing/malformed annotations also produce an error and nonzero status.
 Detailed errors are kept in `summary.json` rather than added to the summary
 CSV's fixed column set.
 
-Running ORION without `--dry-run` fails explicitly **before any writes**.
-Candidate-coordinate CSVs use the same seven reporting columns as Xenium;
-these are new audit reports, not evidence of the missing ORION writer's
-metadata format. No ORION training dataset is generated until its original
-extraction/writing implementation is provided.
+Convert and validate using new output and report destinations:
+
+```bash
+python scripts/data_preprocessing/roi_to_zarr/orion_roi_to_zarr.py \
+  --input-dir /data/ORION-CRC \
+  --output-dir /data/reproduced/ORION-CRC-zarr \
+  --report-dir /data/reproduction-reports/orion-conversion \
+  --reference-dir /data/released/ORION-CRC-zarr \
+  --expected-counts /data/references/orion_crc_patch_summary.csv
+```
+
+The output contract above matches the supplied ORION writing cell, including
+both identical seven-column metadata files. End coordinates can exceed image
+dimensions; retain them when comparing against the original dataset. Padding
+does not adjust those coordinates. No reference ORION total was supplied.
 
 ## Validation, failure handling, and overwrite protection
 
@@ -276,7 +307,7 @@ because none was supplied.
 
 Both report and dataset destinations must be new. Even existing empty
 directories are rejected, and there is no overwrite flag. All sample plans
-and requested reference checks finish before Xenium creates its output
+and requested reference checks finish before either converter creates its output
 root. Source or validation failures prevent Zarr writing. During writing,
 an `INCOMPLETE` marker remains until every sample succeeds. A write failure
 leaves the marker, records completed samples and the error in the report,
@@ -285,8 +316,8 @@ it manually and use a new destination for a subsequent attempt.
 
 Exit status 0 means the requested operation completed, **not** that the
 published dataset has been reproduced. Status 1 indicates a source,
-validation, or writing failure; status 2 indicates invalid CLI usage
-(including an ORION conversion request). Review the verification fields.
+validation, or writing failure; status 2 indicates invalid CLI usage.
+Review the verification fields.
 
 ## Regression checks and remaining evidence
 
@@ -297,17 +328,18 @@ python -m unittest discover \
 
 The tests cover strict coverage thresholds, small-ROI edge behavior, image
 bounds, negative coordinates, polygon holes, duplicate ROI ordering,
-paired array values/dtypes/chunks, metadata comparison, missing inputs,
+paired array values/dtypes/chunks, ORION channel order and padding (including
+empty slices), metadata comparison, missing inputs,
 and overwrite protection. Test images are temporary; test ROI geometries
 stay in memory and no artificial annotation files are installed.
 
 Before claiming reproduction of the released datasets, obtain:
 
-1. Original pathologist ROI files and all registered Xenium images/masks.
+1. Original pathologist ROI files and registered images/masks for both datasets.
 2. The nine Xenium sample names, original individual counts, and both
    modalities' released metadata files (target total: 1,909).
-3. The **ORION extraction and Zarr-writing cell**, corresponding source
-   images/masks, original count outputs, and published metadata.
+3. Original ORION per-sample count outputs and published metadata, plus
+   confirmation that the supplied mIF inputs have the original channel order.
 4. Any upstream image-registration/channel/mask methodology and downstream
    mask substitutions needed to connect these exact notebook inputs and
    outputs to the manuscript's final released training datasets.

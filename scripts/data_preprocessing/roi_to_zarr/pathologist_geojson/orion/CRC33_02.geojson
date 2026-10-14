@@ -1,0 +1,521 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              27633.801663513445,
+              31697.633684941222
+            ],
+            [
+              28436.729408975418,
+              31697.633684941222
+            ],
+            [
+              28436.729408975418,
+              32808.80063759729
+            ],
+            [
+              27633.801663513445,
+              32808.80063759729
+            ],
+            [
+              27633.801663513445,
+              31697.633684941222
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 2,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.02, Height: 0.03, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              24560.47252088693,
+              30800.304683327297
+            ],
+            [
+              25475.277535020094,
+              30800.304683327297
+            ],
+            [
+              25475.277535020094,
+              32146.959645167746
+            ],
+            [
+              24560.47252088693,
+              32146.959645167746
+            ],
+            [
+              24560.47252088693,
+              30800.304683327297
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 4,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.03, Height: 0.04, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              21565.10527381995,
+              30280.940852672575
+            ],
+            [
+              22810.756266137538,
+              30280.940852672575
+            ],
+            [
+              22810.756266137538,
+              31024.530293772073
+            ],
+            [
+              21565.10527381995,
+              31024.530293772073
+            ],
+            [
+              21565.10527381995,
+              30280.940852672575
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 6,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.04, Height: 0.02, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              22660.784457535337,
+              29818.753166798622
+            ],
+            [
+              23113.249420556112,
+              29818.753166798622
+            ],
+            [
+              23113.249420556112,
+              30143.88870023833
+            ],
+            [
+              22660.784457535337,
+              30143.88870023833
+            ],
+            [
+              22660.784457535337,
+              29818.753166798622
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 7,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.01, Height: 0.01, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              25049.73274838754,
+              29507.47661204514
+            ],
+            [
+              26398.662948971545,
+              29507.47661204514
+            ],
+            [
+              26398.662948971545,
+              30317.578697264835
+            ],
+            [
+              25049.73274838754,
+              30317.578697264835
+            ],
+            [
+              25049.73274838754,
+              29507.47661204514
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 9,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.04, Height: 0.02, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              23643.93366001373,
+              27262.32463475553
+            ],
+            [
+              24155.044620747638,
+              27262.32463475553
+            ],
+            [
+              24155.044620747638,
+              27854.7546636192
+            ],
+            [
+              23643.93366001373,
+              27854.7546636192
+            ],
+            [
+              23643.93366001373,
+              27262.32463475553
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 11,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.01, Height: 0.02, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              22003.388673128255,
+              26345.893600488715
+            ],
+            [
+              23118.956317238342,
+              26345.893600488715
+            ],
+            [
+              23118.956317238342,
+              27054.571575840993
+            ],
+            [
+              22003.388673128255,
+              27054.571575840993
+            ],
+            [
+              22003.388673128255,
+              26345.893600488715
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 12,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.03, Height: 0.02, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              23578.32345934312,
+              26686.82690403227
+            ],
+            [
+              23765.532650113102,
+              26686.82690403227
+            ],
+            [
+              23765.532650113102,
+              27260.560298316384
+            ],
+            [
+              23578.32345934312,
+              27260.560298316384
+            ],
+            [
+              23578.32345934312,
+              26686.82690403227
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 13,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.01, Height: 0.02, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              20690.29758738715,
+              26128.17252067979
+            ],
+            [
+              21737.835223194936,
+              26128.17252067979
+            ],
+            [
+              21737.835223194936,
+              27079.298758888388
+            ],
+            [
+              20690.29758738715,
+              27079.298758888388
+            ],
+            [
+              20690.29758738715,
+              26128.17252067979
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 14,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.03, Height: 0.03, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              18726.16496951195,
+              26092.84304216667
+            ],
+            [
+              20142.738998254106,
+              26092.84304216667
+            ],
+            [
+              20142.738998254106,
+              26803.950011235756
+            ],
+            [
+              18726.16496951195,
+              26803.950011235756
+            ],
+            [
+              18726.16496951195,
+              26092.84304216667
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 16,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.04, Height: 0.02, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              21054.367779967437,
+              21213.020003861144
+            ],
+            [
+              22249.902425616343,
+              21213.020003861144
+            ],
+            [
+              22249.902425616343,
+              22496.97946585625
+            ],
+            [
+              21054.367779967437,
+              22496.97946585625
+            ],
+            [
+              21054.367779967437,
+              21213.020003861144
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 18,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.03, Height: 0.04, Area: 0.00",
+        "active": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              22677.426586774753,
+              21989.774387140427
+            ],
+            [
+              23061.85330770595,
+              21989.774387140427
+            ],
+            [
+              23061.85330770595,
+              22333.138371370515
+            ],
+            [
+              22677.426586774753,
+              22333.138371370515
+            ],
+            [
+              22677.426586774753,
+              21989.774387140427
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "objectType": "annotation",
+        "classification": {
+          "name": "Rectangle",
+          "colorRGB": 16776960
+        },
+        "id": 19,
+        "polyscope_type": 2,
+        "zoom": 1,
+        "date": "",
+        "details": "Width: 0.01, Height: 0.01, Area: 0.00",
+        "active": true
+      }
+    }
+  ]
+}

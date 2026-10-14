@@ -198,8 +198,6 @@ def finalize_report(args, dataset: str, samples: list[dict], expected: dict | No
             "note": "Aggregate counts do not establish coordinate or individual-sample reproduction."}
         if not args.samples and report["historical_target"]["status"] == "mismatch":
             validation_failed = True
-    else:
-        report["zarr_conversion"] = "unavailable: supplied ORION source only scans ROI coordinates"
     report["status"] = "failed" if failed or validation_failed else "planned"
     report["validation_failed"] = validation_failed
     return report, failed or validation_failed

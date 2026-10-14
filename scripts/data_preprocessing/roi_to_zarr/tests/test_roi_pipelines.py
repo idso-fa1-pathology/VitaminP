@@ -220,20 +220,131 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(report["zarr_written"])
         self.assertIn("test write failure", report["write_error"])
 
-    def test_orion_refuses_invented_conversion_and_supports_empty_rois(self):
-        (self.input_dir / "CRC01").mkdir()
-        args = ["--input-dir", str(self.input_dir), "--roi-dir", str(self.rois),
-                "--report-dir", str(self.root / "orion_report")]
+
+class OrionWorkflowTests(unittest.TestCase):
+    args = WorkflowTests.args
+
+    def setUp(self):
+        WorkflowTests.setUp(self)
+        renamed = self.input_dir / "CRC01"
+        self.sample_dir.rename(renamed)
+        self.sample_dir, self.sample = renamed, "CRC01"
+
+    def run_orion(self, **kwargs):
+        with patch.object(orion, "load_features", return_value=self.features):
+            return orion.main(self.args(**kwargs))
+
+    def assert_arrays(self, output, coords):
+        # Independent expected values: original channel 1 becomes output 0;
+        # original channel 0 becomes output 1. Masks never change identities.
+        swapped = np.stack((self.mif[1], self.mif[0]), axis=-1)
+        sources = {"he/images": self.he, "mif/images": swapped,
+                   "he/nuclei_masks": self.he_nuclei, "mif/nuclei_masks": self.mif_nuclei,
+                   "he/cell_masks": self.cells, "mif/cell_masks": self.cells}
+        for name, source in sources.items():
+            array = zarr.open(str(output / self.sample / f"{name}.zarr"), mode="r")
+            self.assertEqual(array.dtype, source.dtype)
+            self.assertEqual(array.shape, (len(coords), 512, 512, *source.shape[2:]))
+            self.assertEqual(array.chunks, (1, 512, 512, *source.shape[2:]))
+            self.assertEqual((array.compressor.cname, array.compressor.clevel), ("zstd", 3))
+            for index, (ys, ye, xs, xe) in enumerate(coords):
+                cropped = source[ys:ye, xs:xe]
+                expected = np.zeros((512, 512, *source.shape[2:]), dtype=source.dtype)
+                expected[:cropped.shape[0], :cropped.shape[1]] = cropped
+                np.testing.assert_array_equal(array[index], expected)
+        he_csv = output / self.sample / "he/metadata.csv"
+        self.assertEqual(he_csv.read_bytes(), (output / self.sample / "mif/metadata.csv").read_bytes())
+        with he_csv.open() as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual([tuple(int(row[f]) for f in ("y_start", "y_end", "x_start", "x_end"))
+                          for row in rows], coords)
+        self.assertEqual([int(r["patch_idx"]) for r in rows], list(range(len(coords))))
+
+    def test_channel_swap_for_both_source_layouts_and_six_array_contract(self):
+        coords = [(0, 512, 0, 512), (0, 512, 512, 1024)]
+        for layout in ("chw", "hwc"):
+            with self.subTest(layout=layout):
+                values = self.mif if layout == "chw" else self.mif.transpose(1, 2, 0)
+                imwrite(self.sample_dir / "images/mif_cells.tif", values, photometric="minisblack")
+                self.assertEqual(self.run_orion(report=f"report-{layout}", output=f"output-{layout}"), 0)
+                self.assert_arrays(self.root / f"output-{layout}", coords)
+                self.assertFalse((self.root / f"output-{layout}/INCOMPLETE").exists())
+
+    def test_padding_retains_edge_and_fully_outside_candidates(self):
+        self.features = [{"geometry": mapping(roi)} for roi in (
+            box(900, 900, 1000, 1000), box(0, 0, 100, 100),
+            box(1600, 1600, 1700, 1700), box(0, 0, 512, 512))]
+        coords = [(694, 1206, 694, 1206), (0, 306, 0, 306),
+                  (1394, 1906, 1394, 1906), (0, 512, 0, 512)]
+        self.assertEqual(self.run_orion(), 0)
+        self.assert_arrays(self.root / "output", coords)
+        report = json.loads((self.root / "report/summary.json").read_text())
+        self.assertEqual(report["samples"][0]["padded_patch_indices"], [0, 1, 2])
+        self.assertEqual(report["samples"][0]["empty_patch_indices"], [2])
+        self.assertTrue(report["zarr_written"])
+
+    def test_dry_run_only_reports_coordinates_and_padding(self):
+        self.features = [{"geometry": mapping(box(900, 900, 1000, 1000))}]
+        self.assertEqual(self.run_orion(dry=True), 0)
+        self.assertFalse((self.root / "output").exists())
+        self.assertFalse(list(self.root.rglob("*.zarr")))
+        report = json.loads((self.root / "report/summary.json").read_text())
+        self.assertEqual(report["samples"][0]["padded_patch_indices"], [0])
+        self.assertTrue(report["source_arrays_checked"])
+        self.assertEqual(report["samples"][0]["metadata_comparison"]["status"], "unverified")
+
+    def test_missing_source_keeps_coordinates_but_fails(self):
+        (self.sample_dir / "images/he.tiff").unlink()
+        self.assertEqual(self.run_orion(dry=True), 1)
+        report = json.loads((self.root / "report/summary.json").read_text())
+        self.assertEqual(report["total_patches"], 2)
+        self.assertFalse(report["source_arrays_checked"])
+        self.assertTrue((self.root / "report/CRC01.csv").exists())
+
+    def test_existing_output_and_reports_refused(self):
+        self.assertEqual(self.run_orion(), 0)
+        sentinel = self.root / "output/sentinel"
+        sentinel.write_text("untouched")
+        with self.assertRaises(FileExistsError):
+            self.run_orion(report="report2")
+        self.assertEqual(sentinel.read_text(), "untouched")
+        self.assertFalse((self.root / "report2").exists())
+        with self.assertRaises(FileExistsError):
+            self.run_orion(output="output2", dry=True)
+
+    def test_reference_and_count_failures_block_conversion(self):
+        counts = self.root / "counts.csv"
+        counts.write_text("sample,num_patches\nCRC01,3\n")
+        for index, extra in enumerate((["--expected-counts", str(counts)],
+                                       ["--reference-dir", str(self.root / "missing")])):
+            with patch.object(orion, "load_features", return_value=self.features):
+                result = orion.main(self.args(report=f"report{index}") + extra)
+            self.assertEqual(result, 1)
+            self.assertFalse((self.root / "output").exists())
+
+    def test_write_failure_keeps_incomplete_marker(self):
+        with patch.object(orion, "write_sample", side_effect=OSError("test write failure")):
+            with self.assertRaises(OSError):
+                self.run_orion()
+        self.assertTrue((self.root / "output/INCOMPLETE").exists())
+        report = json.loads((self.root / "report/summary.json").read_text())
+        self.assertEqual(report["status"], "failed")
+        self.assertFalse(report["zarr_written"])
+
+    def test_output_required_and_empty_rois_reported_as_skipped(self):
+        args = self.args()
+        index = args.index("--output-dir")
+        del args[index:index + 2]
         with self.assertRaises(SystemExit) as exc:
             orion.main(args)
         self.assertEqual(exc.exception.code, 2)
-        self.assertFalse((self.root / "orion_report").exists())
+        self.assertFalse((self.root / "report").exists())
         with patch.object(orion, "load_features", return_value=[]):
-            self.assertEqual(orion.main(args + ["--dry-run"]), 0)
-        report = json.loads((self.root / "orion_report/summary.json").read_text())
+            self.assertEqual(orion.main(args + ["--dry-run"]), 1)
+        report = json.loads((self.root / "report/summary.json").read_text())
         self.assertEqual(report["total_patches"], 0)
-        self.assertFalse(report["extraction_verified"])
-        self.assertTrue((self.root / "orion_report/orion_crc_patch_summary.csv").exists())
+        self.assertEqual(report["samples"][0]["status"], "skipped")
+        self.assertTrue((self.root / "report/orion_crc_patch_summary.csv").exists())
 
 
 if __name__ == "__main__":
